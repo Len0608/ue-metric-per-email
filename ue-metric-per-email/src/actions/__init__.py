@@ -1,13 +1,12 @@
 """Actions module - Business logic implementations."""
 
 from actions.output import ActionOutput
+from actions.send_metrics_report_email import send_metrics_report_email
 from manager import ExtensionManager
+
 extension_manager = ExtensionManager()
 
-# Import your action functions here
-# from actions.action_name import action_function
-
-# Map action names to functions
+# Map UAC action choice values to action functions
 ACTION_MAPPER = {
-    # "action_name": action_function,
+    "Send Metrics Report Email": send_metrics_report_email,
 }

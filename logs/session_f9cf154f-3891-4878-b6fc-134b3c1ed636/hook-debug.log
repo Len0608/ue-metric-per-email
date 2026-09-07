@@ -1,0 +1,13 @@
+2026-09-07 07:53:52 - Hook script started
+2026-09-07 07:53:52 - Received stdin data: {"session_id":"f9cf154f-3891-4878-b6fc-134b3c1ed636","transcript_path":"/tmp/.claude/projects/-tmp-ue-metric-per-email/f9cf154f-3891-4878-b6fc-134b3c1ed636.jsonl","cwd":"/tmp/ue-metric-per-email","hook_event_name":"SessionStart","source":"startup"}
+
+2026-09-07 07:53:52 - Parsed event data: {
+  "session_id": "f9cf154f-3891-4878-b6fc-134b3c1ed636",
+  "transcript_path": "/tmp/.claude/projects/-tmp-ue-metric-per-email/f9cf154f-3891-4878-b6fc-134b3c1ed636.jsonl",
+  "cwd": "/tmp/ue-metric-per-email",
+  "hook_event_name": "SessionStart",
+  "source": "startup"
+}
+2026-09-07 07:53:52 - Event type: SessionStart
+2026-09-07 07:53:52 - Handling SessionStart
+2026-09-07 07:53:52 - Hook completed successfully

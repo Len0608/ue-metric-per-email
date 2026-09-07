@@ -27,32 +27,41 @@ extension_manager = ExtensionManager()
 class InputFields:
     """Input fields from UAC with validation.
 
-    Define fields based on your template.json fields using wrapper types.
-    All fields should use wrapper types from fields.types for type safety.
+    All user-defined fields are Optional[Type] = None.
+    UAC Controller enforces required field validation at the template level;
+    validation methods here perform semantic checks and collect errors before
+    raising a single DataValidationError.
 
-    All user-defined fields should be Optional[Type] = None
-    - UAC Controller enforces required field validation (template.json)
-    - By the time fields reach the extension, they may be None
-    - Only validate fields that have values (check for None first)
+    Fields:
+        action: Operation to perform (always "Send Metrics Report Email").
+        controller_url: Base URL of the Universal Controller metrics endpoint.
+        uac_credential: UAC username/password credential for HTTP Basic auth.
+        metric_name_filter: Comma-separated metric name prefixes for filtering (optional).
+        smtp_host: Hostname or IP of the SMTP server.
+        smtp_port: TCP port of the SMTP server (1–65535, default 587).
+        connection_security: SMTP connection security mode (STARTTLS, SSL/TLS, None).
+        smtp_credential: SMTP username/password credential (optional for None security).
+        to_recipients: Comma-separated list of primary recipient email addresses.
+        cc_recipients: Comma-separated list of CC recipient email addresses (optional).
+        subject: Subject line of the report email (optional, has default).
+        body: Plain-text body of the report email (optional, has default).
+        previous_output: Auto-populated from previous run OutputFields on re-runs.
+        _skip_validation: Internal flag — bypass validation when True.
     """
 
     # User-defined fields - ALWAYS Optional, even if required in template.json
     action: Optional[SingleChoice] = None
-
-    # Define your extension's fields here using wrapper types
-    # Example fields:
-    # resource_name: Optional[Text] = None
-    # timeout: Optional[Integer] = None
-    # api_credential: Optional[Credential] = None
-    # tags: Optional[MultiChoice] = None
-
-    # Script fields - use Script wrapper (UAC returns temp file path)
-    # sql_query: Optional[Script] = None
-    # json_payload: Optional[Script] = None
-
-    # Control fields - use MultiChoice for multi-select options
-    # stdout_options: Optional[MultiChoice] = None
-    # output_options: Optional[MultiChoice] = None
+    controller_url: Optional[Text] = None
+    uac_credential: Optional[Credential] = None
+    metric_name_filter: Optional[Text] = None
+    smtp_host: Optional[Text] = None
+    smtp_port: Optional[Integer] = None
+    connection_security: Optional[SingleChoice] = None
+    smtp_credential: Optional[Credential] = None
+    to_recipients: Optional[Text] = None
+    cc_recipients: Optional[Text] = None
+    subject: Optional[Text] = None
+    body: Optional[Text] = None
 
     # Previous run output (auto-populated for re-runs)
     previous_output: Optional[OutputFields] = None
@@ -94,7 +103,7 @@ class InputFields:
             field_wrapper_types[field_name] = base_type
 
         for key, value in fields.items():
-            # Skip flattened credential fields (e.g., "api_credential.token")
+            # Skip flattened credential fields (e.g., "uac_credential.token")
             if "." in key:
                 continue
 
@@ -222,9 +231,11 @@ class InputFields:
 
         # Call validation methods
         self._validate_action()
-        # Add your validation methods here
-        # self._validate_resource_name()
-        # self._validate_timeout()
+        self._validate_controller_url()
+        self._validate_smtp_port()
+        self._validate_connection_security()
+        self._validate_to_recipients()
+        self._validate_cc_recipients()
 
         # Raise once if errors collected
         if extension_manager.has_errors():
@@ -235,96 +246,99 @@ class InputFields:
     def _validate_action(self):
         """Validate action field (SingleChoice wrapper).
 
-        Only validate fields with values - check for None first.
+        Accepts only the single defined action value.
         """
-        # ALWAYS check for None first - only validate if field has a value
         if self.action is not None:
-            valid_actions = ["create", "delete", "update", "list"]  # Define your actions
-            # Access SingleChoice value via .value property
+            valid_actions = ["Send Metrics Report Email"]
             if self.action.value not in valid_actions:
                 exc = DataValidationError(
-                    f"Invalid action '{self.action.value}'. Valid actions: {', '.join(valid_actions)}"
+                    f"Invalid action '{self.action.value}'. "
+                    f"Valid actions: {', '.join(valid_actions)}"
                 )
                 extension_manager.add_error(exc, field="action", value=self.action.value)
 
-    # Add your validation methods here
-    # Always check for None first - only validate fields with values
-    #
-    # def _validate_resource_name(self):
-    #     """Validate resource_name field (Text wrapper)."""
-    #     # Always check for None first
-    #     if self.resource_name is not None:
-    #         # Access Text value via .value property
-    #         if len(self.resource_name.value) == 0 or len(self.resource_name.value) > 255:
-    #             exc = DataValidationError("resource_name must be 1-255 characters")
-    #             extension_manager.add_error(
-    #                 exc, field="resource_name", value=self.resource_name.value
-    #             )
-    #
-    # def _validate_timeout(self):
-    #     """Validate timeout field (Integer wrapper)."""
-    #     # Always check for None first - only validate if field has a value
-    #     if self.timeout is not None:
-    #         # Access Integer value via .value property
-    #         if self.timeout.value < 1:
-    #             exc = DataValidationError("timeout must be >= 1")
-    #             extension_manager.add_error(exc, field="timeout", value=self.timeout.value)
-    #
-    # def _validate_sql_query(self):
-    #     """Validate sql_query script field (Script wrapper)."""
-    #     # Always check for None first - only validate if field has a value
-    #     if self.sql_query is not None:
-    #         # Validate file exists using Script wrapper method
-    #         if not self.sql_query.exists():
-    #             exc = DataValidationError("SQL query file not found")
-    #             extension_manager.add_error(exc, field="sql_query")
-    #             return
-    #
-    #         # Read content using Script wrapper method
-    #         try:
-    #             content = self.sql_query.read()
-    #             if not content.strip():
-    #                 exc = DataValidationError("SQL query cannot be empty")
-    #                 extension_manager.add_error(exc, field="sql_query")
-    #         except Exception as e:
-    #             exc = DataValidationError(f"Failed to read SQL query: {str(e)}")
-    #             extension_manager.add_error(exc, field="sql_query")
-    #
-    # def _validate_headers(self):
-    #     """Validate headers array field (Array wrapper).
-    #
-    #     IMPORTANT: UAC sends arrays in FLATTENED format!
-    #     Task definition has: {"name": "X", "value": "Y"}
-    #     UAC transforms to: {"X": "Y"}
-    #
-    #     See Array class documentation in fields/types.py for details.
-    #     """
-    #     # Always check for None first - only validate if field has a value
-    #     if self.headers is not None:
-    #         # Access Array pairs (list of flattened dicts)
-    #         header_list = self.headers.pairs
-    #
-    #         for idx, header in enumerate(header_list):
-    #             # Check if dictionary is empty
-    #             if not header:
-    #                 exc = DataValidationError(f"Header at index {idx} is empty")
-    #                 extension_manager.add_error(exc, field="headers", index=idx)
-    #                 continue
-    #
-    #             # Extract key from flattened format: {"X": "Y"}
-    #             # Do NOT check for "name" property - it doesn't exist!
-    #             header_name = next(iter(header.keys()), "")
-    #             if not header_name:
-    #                 exc = DataValidationError(
-    #                     f"Header at index {idx} must have a non-empty name"
-    #                 )
-    #                 extension_manager.add_error(exc, field="headers", index=idx)
-    #                 continue
-    #
-    #             # Optional: validate header value
-    #             header_value = header[header_name]
-    #             if header_value is None:
-    #                 exc = DataValidationError(
-    #                     f"Header '{header_name}' at index {idx} has null value"
-    #                 )
-    #                 extension_manager.add_error(exc, field="headers", index=idx)
+    def _validate_controller_url(self):
+        """Validate controller_url is a well-formed HTTP or HTTPS URL.
+
+        Accepts http:// or https:// followed by at least one hostname character.
+        A trailing slash is tolerated.
+        """
+        import re
+        if self.controller_url is not None and self.controller_url.value:
+            url = self.controller_url.value.strip()
+            pattern = r'^https?://[^\s/]+'
+            if not re.match(pattern, url):
+                exc = DataValidationError(
+                    f"Invalid controller_url '{url}'. "
+                    "Must be a well-formed HTTP or HTTPS URL (e.g. https://ps1.stonebranchdev.cloud)"
+                )
+                extension_manager.add_error(exc, field="controller_url", value=url)
+
+    def _validate_smtp_port(self):
+        """Validate smtp_port is within the valid TCP port range (1–65535)."""
+        if self.smtp_port is not None:
+            port = self.smtp_port.value
+            if not (1 <= port <= 65535):
+                exc = DataValidationError(
+                    f"Invalid smtp_port '{port}'. Must be between 1 and 65535."
+                )
+                extension_manager.add_error(exc, field="smtp_port", value=port)
+
+    def _validate_connection_security(self):
+        """Validate connection_security is one of the accepted values."""
+        if self.connection_security is not None:
+            valid_modes = ["STARTTLS", "SSL/TLS", "None"]
+            if self.connection_security.value not in valid_modes:
+                exc = DataValidationError(
+                    f"Invalid connection_security '{self.connection_security.value}'. "
+                    f"Valid options: {', '.join(valid_modes)}"
+                )
+                extension_manager.add_error(
+                    exc,
+                    field="connection_security",
+                    value=self.connection_security.value,
+                )
+
+    def _validate_to_recipients(self):
+        """Validate to_recipients contains at least one syntactically valid email address.
+
+        Each address in the comma-separated list must match local-part@domain.
+        Whitespace around each address is trimmed.
+        """
+        import re
+        if self.to_recipients is not None and self.to_recipients.value:
+            raw = self.to_recipients.value
+            addresses = [addr.strip() for addr in raw.split(",")]
+            addresses = [addr for addr in addresses if addr]
+            if not addresses:
+                exc = DataValidationError(
+                    "to_recipients must contain at least one email address."
+                )
+                extension_manager.add_error(exc, field="to_recipients")
+                return
+            email_pattern = r'^[^@\s]+@[^@\s]+\.[^@\s]+'
+            for addr in addresses:
+                if not re.match(email_pattern, addr):
+                    exc = DataValidationError(
+                        f"Invalid recipient address '{addr}' in to_recipients."
+                    )
+                    extension_manager.add_error(exc, field="to_recipients", value=addr)
+
+    def _validate_cc_recipients(self):
+        """Validate cc_recipients when provided.
+
+        Optional field. If non-empty, each comma-separated address must match
+        local-part@domain. Whitespace around each address is trimmed.
+        """
+        import re
+        if self.cc_recipients is not None and self.cc_recipients.value:
+            raw = self.cc_recipients.value
+            addresses = [addr.strip() for addr in raw.split(",")]
+            addresses = [addr for addr in addresses if addr]
+            email_pattern = r'^[^@\s]+@[^@\s]+\.[^@\s]+'
+            for addr in addresses:
+                if not re.match(email_pattern, addr):
+                    exc = DataValidationError(
+                        f"Invalid recipient address '{addr}' in cc_recipients."
+                    )
+                    extension_manager.add_error(exc, field="cc_recipients", value=addr)
