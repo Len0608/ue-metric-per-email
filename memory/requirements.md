@@ -1,0 +1,1 @@
+This integration should send an email with the content of a csv file from the stonebranch universal controller metric endpoint. it should parse the content of the metric endpoint, devise a human readable csv, and then send this csv per email to the user. Credentials needed for this would be the uac credentials for accessing the endpoint.
