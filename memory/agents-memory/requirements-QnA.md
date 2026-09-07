@@ -59,7 +59,7 @@ The requirements establish *what* should happen end to end, but three functional
 - **Rationale**: SMTP works with any mail infrastructure (Microsoft 365, Google Workspace, on-premise relays), needs no third-party module, and is the simplest solution that stays maintainable. Core-library solutions have the best backwards compatibility and lowest maintenance cost.
 - **Trade-offs**: Optimizing for universality and zero extra dependencies; deprioritizing vendor-specific features such as delivery-event webhooks and template management, which are not needed for this use case.
 - **Requirement Impact**: Adds input fields: SMTP Host (Text Field), SMTP Port (Integer Field, default 587), plus the security/authentication details settled in Question 6.
-- **User's Answer**: [Placeholder for User's Answer]
+- **User's Answer**: O1 — SMTP server via Python's standard library `smtplib`, with the CSV attached as a MIME attachment.
 
 **Question 2**: For retrieving metrics from the Universal Controller, is HTTP Basic authentication with a UAC username/password credential the intended method, and can we assume the UAC user holds the required `ops_admin` or `ops_service` role?
 - **Options**:
@@ -72,7 +72,7 @@ The requirements establish *what* should happen end to end, but three functional
 - **Rationale**: Matches the requirement's wording ("uac credentials"), is the most common setup, and follows the single-source-of-truth credential mapping policy (username → `user`, password → `password`; no fallback logic).
 - **Trade-offs**: Optimizing for simplicity and alignment with the stated requirement; deprioritizing token-based auth, which adds value mainly where password rotation policies make service passwords impractical. If tokens are preferred, the credential simply maps the token to the `token` attribute instead — a small, contained change.
 - **Requirement Impact**: Adds input fields: Controller URL (Text Field, e.g., `https://ps1.stonebranchdev.cloud`) and UAC Credential (Credential Field). Adds a documented precondition on the UAC user's role.
-- **User's Answer**: [Placeholder for User's Answer]
+- **User's Answer**: O1 — HTTP Basic authentication with a UAC username/password credential; document that the user needs the `ops_admin` or `ops_service` role.
 
 **Question 3**: Should the CSV include all metrics returned by the endpoint, or should the task support scoping which metrics are included?
 - **Options**:
@@ -86,7 +86,7 @@ The requirements establish *what* should happen end to end, but three functional
 - **Rationale**: One optional field satisfies both "send me everything" and "send me only UAC business metrics" (filter `uc_`) without hardcoding assumptions about which metrics matter to the recipient. Empty-by-default keeps first use friction-free.
 - **Trade-offs**: Optimizing for flexibility with minimal added complexity; deprioritizing advanced query capabilities (regex matching, label-based filtering), which can be added later if a real need emerges.
 - **Requirement Impact**: Adds one optional input field: Metric Name Filter (Text Field). Requirements should state: "If a filter is provided, only metric families whose names start with one of the given prefixes are included in the CSV."
-- **User's Answer**: [Placeholder for User's Answer]
+- **User's Answer**: O1 — include all metrics by default and add an optional "Metric Name Filter" input (Text Field, comma-separated name prefixes; empty = all metrics).
 
 ## CSV Format & Email Composition Questions
 
@@ -101,7 +101,7 @@ The requirements establish *what* should happen end to end, but three functional
 - **Rationale**: The HELP description is precisely what makes the CSV "human readable" for a business recipient; the marginal cost of two extra columns is negligible while the readability gain is significant.
 - **Trade-offs**: Optimizing for standalone readability of the CSV; deprioritizing file compactness (Description text repeats across rows of the same family — irrelevant at these data volumes).
 - **Requirement Impact**: Requirements should specify the exact column set and that each metric sample becomes one CSV row.
-- **User's Answer**: [Placeholder for User's Answer]
+- **User's Answer**: O1 — the five-column layout including Type and Description.
 
 **Question 5**: How should the email itself be composed — are the following defaults acceptable: required "To" recipients field (comma-separated), optional CC, configurable Subject with a sensible default, short configurable body text, and the CSV attached as a timestamped file (e.g., `uac_metrics_2026-09-07_1030.csv`)?
 - **Options**:
@@ -115,7 +115,7 @@ The requirements establish *what* should happen end to end, but three functional
 - **Rationale**: An attachment is the form a CSV is meant to travel in — downstream the recipient can open, sort, and archive it. The default subject and body keep task definitions minimal while allowing customization.
 - **Trade-offs**: Optimizing for recipient usability and minimal required inputs; deprioritizing inline previews, which add formatting complexity for little value since the STDOUT summary already gives operators visibility.
 - **Requirement Impact**: Adds input fields: To Recipients (required), CC Recipients (optional), Subject (optional with default), Body (optional). Requirements should state the attachment filename convention.
-- **User's Answer**: [Placeholder for User's Answer]
+- **User's Answer**: O1 — attachment with fields: To Recipients (Text Field, required, comma-separated), CC Recipients (Text Field, optional), Subject (Text Field, default e.g. "UAC Controller Metrics Report"), Body (Large Text Field, optional short default text), timestamped attachment filename.
 
 **Question 6**: Which SMTP connection security and authentication mode should be the default?
 - **Options**:
@@ -129,7 +129,7 @@ The requirements establish *what* should happen end to end, but three functional
 - **Rationale**: STARTTLS/587 with authentication is the secure production default that works with virtually every mail provider; exposing the mode as a choice field accommodates internal relays without compromising the secure default.
 - **Trade-offs**: Optimizing for secure-by-default production readiness; deprioritizing nothing significant — the None option remains available and clearly labeled for development use.
 - **Requirement Impact**: Adds input fields: Connection Security (Choice Field, default STARTTLS), SMTP Credential (Credential Field, optional when Connection Security allows anonymous relay). Requirements should note the second credential is distinct from the UAC credential.
-- **User's Answer**: [Placeholder for User's Answer]
+- **User's Answer**: O1 as the default — Connection Security choice field (values: STARTTLS [default], SSL/TLS, None) plus an SMTP Credential Field (username → `user`, password → `password`), with the credential required whenever authentication is in use. Supporting all three modes via the choice field is recommended since it costs little and covers development scenarios.
 
 ## Functional Behavior & Output Questions
 
@@ -144,7 +144,7 @@ The requirements establish *what* should happen end to end, but three functional
 - **Rationale**: The task's purpose is delivering a useful report; an empty CSV in an inbox is a silent failure that erodes trust in the report. Failing the task instance makes the problem visible where operators look — in UAC.
 - **Trade-offs**: Optimizing for failure visibility and recipient trust; deprioritizing the edge case where a legitimately empty result should still notify — that scenario can be revisited if it arises in practice.
 - **Requirement Impact**: Requirements should enumerate: success condition (email accepted by SMTP server), failure categories (UAC connection/auth, parse, empty result, SMTP connection/auth/send), and validation failures (malformed URL, invalid recipient format).
-- **User's Answer**: [Placeholder for User's Answer]
+- **User's Answer**: O1 — empty result is a failure with status `Data Error: No metrics matched — check the metric name filter and the UAC user's role`; standard 0/1/20 exit code scheme.
 
 **Question 8**: Are the following task outputs acceptable: STDOUT showing a short execution summary table (metric families parsed, CSV rows written, recipients, attachment filename); two output-only fields (`Metrics Row Count`, `Email Recipients`); Extension Output JSON containing a `result` object with metrics counts, filter applied, attachment filename, and recipients (an `error` object on failure); and the CSV existing only as the email attachment (not persisted to the Agent filesystem)?
 - **Options**:
@@ -157,7 +157,7 @@ The requirements establish *what* should happen end to end, but three functional
 - **Rationale**: The stated requirement is email delivery; keeping the file temporary avoids accumulating stale files on Agents and follows the temporary-file handling pattern. Full metric data never goes inline to STDOUT or Extension Output, keeping the UAC database lean.
 - **Trade-offs**: Optimizing for a clean Agent filesystem and lean UAC storage; deprioritizing file reuse by downstream workflow tasks — if that need emerges, a boolean "Save CSV to Runtime Directory" field is a small additive change.
 - **Requirement Impact**: Adds output-only fields: Metrics Row Count (Text Field, Output Only), Email Recipients (Text Field, Output Only). Requirements should specify the Extension Output `result`/`error` structure.
-- **User's Answer**: [Placeholder for User's Answer]
+- **User's Answer**: O1 — CSV as a temporary file only, with the described STDOUT summary, two output-only fields, and structured Extension Output.
 
 ## Environment Variable Questions
 
@@ -172,4 +172,4 @@ The requirements establish *what* should happen end to end, but three functional
 - **Rationale**: Keeps the task form focused on what users actually decide per task (recipients, filter, subject) while retaining operational tunability for the rare environment that needs it. Reuses established variable names instead of inventing new ones.
 - **Trade-offs**: Optimizing for a minimal, uncluttered task form; deprioritizing per-task-definition timeout visibility, which is rarely needed and remains adjustable via task-level environment variables.
 - **Requirement Impact**: Requirements should document both variables, their defaults, and that TLS verification is on by default.
-- **User's Answer**: [Placeholder for User's Answer]
+- **User's Answer**: O1 — `UE_HTTP_TIMEOUT` (default 30 seconds) plus documented support for the standard `REQUESTS_CA_BUNDLE`; no timeout field on the template.
